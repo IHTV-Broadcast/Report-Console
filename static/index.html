@@ -58,13 +58,19 @@
     </div>
 
     <div class="app-container" id="app-container" style="display: none;">
+        <!-- Backdrop overlay for mobile drawer -->
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
         <!-- Sidebar Navigation -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="app-sidebar">
             <div class="sidebar-header">
                 <div class="logo">
                     <i data-lucide="bar-chart-3" class="logo-icon"></i>
                     <span>Report Console</span>
                 </div>
+                <button class="btn-sidebar-close" id="btn-sidebar-close" aria-label="Close navigation">
+                    <i data-lucide="x"></i>
+                </button>
             </div>
             
             <nav class="sidebar-nav">
@@ -105,7 +111,7 @@
                     <div style="overflow: hidden;">
                         <div style="display: flex; align-items: center; gap: 6px;">
                             <span id="active-user-name" class="font-semibold" style="font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;">User</span>
-                            <span id="active-user-badge" class="badge badge-leader" style="font-size: 0.65rem; padding: 2px 5px;">Role</span>
+                            <span id="active-user-badge" class="badge badge-role-leader" style="font-size: 0.65rem; padding: 2px 5px;">Role</span>
                         </div>
                         <span class="text-secondary small" style="font-size: 0.725rem;">Logged In</span>
                     </div>
@@ -115,6 +121,25 @@
                 </div>
             </div>
         </aside>
+
+        <!-- Mobile Navigation Topbar -->
+        <header class="mobile-topbar" id="mobile-topbar">
+            <button class="mobile-menu-btn" id="mobile-menu-toggle" aria-label="Toggle navigation menu">
+                <i data-lucide="menu"></i>
+            </button>
+            <div class="mobile-topbar-brand">
+                <i data-lucide="bar-chart-3" class="logo-icon"></i>
+                <span id="mobile-view-title">Dashboard</span>
+            </div>
+            <div class="mobile-topbar-actions">
+                <button class="btn-mobile-action" id="mobile-btn-refresh" title="Refresh Data" aria-label="Refresh Data">
+                    <i data-lucide="refresh-cw"></i>
+                </button>
+                <button class="btn-mobile-action btn-logout" id="mobile-btn-logout" title="Sign Out" aria-label="Sign Out">
+                    <i data-lucide="log-out"></i>
+                </button>
+            </div>
+        </header>
 
         <!-- Main Content Area -->
         <main class="main-content">
@@ -1036,6 +1061,10 @@
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-danger btn-delete-from-approval-modal" id="btn-approval-delete" style="margin-right: auto; display: none;">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Report</span>
+                    </button>
                     <button type="button" class="btn btn-secondary btn-close-modal-btn">Cancel</button>
                     <button type="submit" class="btn btn-success" id="btn-submit-approval">
                         <i data-lucide="check-circle-2"></i>
@@ -1089,7 +1118,7 @@
 
     <!-- MODAL 6: CONSOLIDATED REPORT MODAL -->
     <div class="modal-overlay" id="consolidated-modal">
-        <div class="modal-container" style="max-width: 540px;">
+        <div class="modal-container" style="max-width: 620px;">
             <div class="modal-header">
                 <h2>Create Consolidated Leader Report</h2>
                 <button type="button" class="btn-close-modal btn-dialog-close" id="consolidated-modal-close"><i data-lucide="x"></i></button>
@@ -1136,49 +1165,25 @@
 
                     <!-- Problem Details Container (Shown only if has-issue === 'yes') -->
                     <div id="consolidated-problem-details-container" style="display: none; padding: 16px; background: rgba(255, 255, 255, 0.015); border: 1px solid var(--border-color); border-radius: 10px;" class="mb-3">
-                        <!-- Affected Section/Role -->
-                        <div class="form-group mb-3">
-                            <label for="consolidated-section" style="font-size: 0.9rem; font-weight: 600;">
-                                <span>In which section did the problem occur? *</span>
-                            </label>
-                            <p class="text-secondary small mb-2">Select section matching your team roles</p>
-                            <select id="consolidated-section" class="form-control">
-                                <!-- Dynamically populated based on leader's roles -->
-                            </select>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                                <i data-lucide="alert-triangle" style="width: 18px; height: 18px; color: var(--rose-400);"></i>
+                                <span>Team Incidents & Issues</span>
+                            </h4>
+                            <span class="text-secondary small font-medium" id="consolidated-issues-count-badge">1 Issue</span>
                         </div>
 
-                        <!-- Problem Category -->
-                        <div class="form-group mb-3">
-                            <label for="consolidated-category">Problem Category</label>
-                            <select id="consolidated-category" class="form-control">
-                                <option value="General">General / Other</option>
-                                <option value="Broadcast">Broadcast</option>
-                                <option value="Controls">Controls & Equipment</option>
-                                <option value="Internet">Internet & Signal</option>
-                                <option value="Servers">Servers</option>
-                            </select>
+                        <!-- Dynamic Issues List -->
+                        <div id="consolidated-issues-list" style="display: flex; flex-direction: column; gap: 14px;">
+                            <!-- Dynamically populated issue cards -->
                         </div>
 
-                        <!-- Live Event fields (shown conditionally if Live section selected) -->
-                        <div id="consolidated-live-event-fields" class="p-3 mb-3" style="display: none; background: rgba(99, 102, 241, 0.05); border: 1px dashed rgba(99, 102, 241, 0.3); border-radius: 8px;">
-                            <div class="form-group mb-2">
-                                <label for="consolidated-live-name" class="small">Live Broadcast / Event Name</label>
-                                <input type="text" id="consolidated-live-name" class="form-control" placeholder="e.g. Farsi News Live Stream">
-                            </div>
-                            <div class="form-group">
-                                <label for="consolidated-live-source" class="small">Live Event Source</label>
-                                <select id="consolidated-live-source" class="form-control">
-                                    <option value="Controls">Controls</option>
-                                    <option value="Servers">Servers</option>
-                                    <option value="Internet">Internet</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="consolidated-description">Problem Description *</label>
-                            <textarea id="consolidated-description" rows="3" class="form-control" placeholder="Describe team incidents, downtime, or corrective actions taken..."></textarea>
+                        <!-- Button to add new issue -->
+                        <div style="margin-top: 14px;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-consolidated-add-issue" style="border-style: dashed; border-color: var(--primary); width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; font-weight: 600;">
+                                <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i>
+                                <span>+ Add New Issue</span>
+                            </button>
                         </div>
                     </div>
 
@@ -1408,6 +1413,6 @@
     </div>
 
     <!-- Script File -->
-    <script src="/js/app.js?v=1.0.7"></script>
+    <script src="/js/app.js?v=1.3.2"></script>
 </body>
 </html>

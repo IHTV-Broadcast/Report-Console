@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
 
-from fastapi import FastAPI, HTTPException, Query, Depends, status, Header
+from fastapi import FastAPI, HTTPException, Query, Depends, status, Header, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +41,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_no_cache_header(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.endswith(".js") or request.url.path.endswith(".html") or request.url.path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # Paths
 ANALYTICS_DIR = Path(__file__).resolve().parent / 'Analytics'
@@ -609,7 +618,7 @@ async def get_stats(user_context: tuple = Depends(get_user_role_context)):
     emp_leaderboard_map = {}
     
     for e in all_employees:
-        n = (e.get("name") or "").strip()
+        n = e.get("name")
         if not n:
             continue
         emp_units = get_employee_authorized_units(e)
@@ -878,6 +887,37 @@ def get_employee_authorized_units(emp: dict) -> set:
                 
     return normalized_auth
 
+# Helper to retrieve units where an employee acts strictly as a Leader (ignores operational employee units)
+def get_leader_categories(emp_dict: dict) -> set:
+    if not emp_dict:
+        return set()
+    valid_categories = {'broadcast', 'conductor', 'archive', 'social', 'r&d', 'live', 'playlist', 'helpdesk'}
+    leader_units = set()
+
+    # 1. Primary criterion: leader_type (e.g. "broadcast leader", "social leader", "conductor leader", "r&d leader")
+    l_type = str(emp_dict.get("leader_type") or "").strip().lower()
+    if l_type:
+        for cat in valid_categories:
+            if cat in l_type:
+                leader_units.add(cat)
+
+    # 2. Secondary criterion: explicit leader titles in roles (e.g. "Broadcast Leader", "Social Leader")
+    roles = emp_dict.get("roles") or []
+    if not isinstance(roles, list):
+        roles = [roles]
+    for r in roles:
+        r_clean = str(r).strip().lower()
+        if "leader" in r_clean and r_clean != "leader":
+            for cat in valid_categories:
+                if cat in r_clean:
+                    leader_units.add(cat)
+
+    # Operational/employee units in emp_dict["unit"] and generic non-leader roles are strictly ignored.
+    return leader_units
+
+# Alias for leader report submissions
+get_leader_submission_units = get_leader_categories
+
 # Helper to determine leader access to a report (including cross-category problems)
 def get_report_visibility_for_user(user_name: str, role_tier: str, emp: dict, report: dict, employees_list: list) -> Optional[dict]:
     """
@@ -925,35 +965,6 @@ def get_report_visibility_for_user(user_name: str, role_tier: str, emp: dict, re
             rep_to = [rep_to]
         rep_to_clean = [str(x).strip() for x in rep_to if x is not None]
 
-        # Get leader's categories/units
-        valid_categories = {'broadcast', 'conductor', 'archive', 'social', 'r&d', 'live', 'playlist', 'helpdesk'}
-
-        def get_leader_categories(emp_dict: dict) -> set:
-            cats = set()
-            roles = emp_dict.get("roles") or []
-            if not isinstance(roles, list):
-                roles = [roles]
-            units = emp_dict.get("unit") or []
-            if not isinstance(units, list):
-                units = [units]
-            l_type = str(emp_dict.get("leader_type") or "").lower()
-
-            for r in roles:
-                r_clean = str(r).strip().lower()
-                if r_clean in valid_categories:
-                    cats.add(r_clean)
-            for u in units:
-                u_clean = str(u).strip().lower()
-                if "social" in u_clean:
-                    cats.add("social")
-                for cat in valid_categories:
-                    if cat in u_clean:
-                        cats.add(cat)
-            for cat in valid_categories:
-                if cat in l_type:
-                    cats.add(cat)
-            return cats
-
         leader_cats = get_leader_categories(emp)
 
         # Enforce subordinate employee unit authorization
@@ -961,11 +972,12 @@ def get_report_visibility_for_user(user_name: str, role_tier: str, emp: dict, re
 
         problems = r_data.get("problems") or report.get("problems") or []
 
-        # If a report has no problems (clean shift), only direct supervisors have access
+        # If a report has no problems (clean shift), only direct supervisors whose leadership covers the subordinate's unit have access
         if not problems:
             is_direct_subordinate = any(x == leader_id or x.lower() == leader_name for x in rep_to_clean)
             if is_direct_subordinate:
-                return report
+                if any(u in leader_cats for u in emp_auth_units):
+                    return report
             return None
 
         # Filter problems based on unit authorization and leader routing rules
@@ -1062,34 +1074,6 @@ def is_report_pending_for_admin(report: dict, employees_list: list) -> bool:
         return False
         
     emp_auth_units = get_employee_authorized_units(target_emp)
-    valid_categories = {'broadcast', 'conductor', 'archive', 'social', 'r&d', 'live', 'playlist', 'helpdesk'}
-    
-    def get_leader_categories(emp_dict: dict) -> set:
-        cats = set()
-        roles = emp_dict.get("roles") or []
-        if not isinstance(roles, list):
-            roles = [roles]
-        units = emp_dict.get("unit") or []
-        if not isinstance(units, list):
-            units = [units]
-        l_type = str(emp_dict.get("leader_type") or "").lower()
-        
-        for r in roles:
-            r_clean = str(r).strip().lower()
-            if r_clean in valid_categories:
-                cats.add(r_clean)
-        for u in units:
-            u_clean = str(u).strip().lower()
-            if "social" in u_clean:
-                cats.add("social")
-            for cat in valid_categories:
-                if cat in u_clean:
-                    cats.add(cat)
-        for cat in valid_categories:
-            if cat in l_type:
-                cats.add(cat)
-        return cats
-
     for prob in problems:
         if not isinstance(prob, dict):
             continue
@@ -1408,30 +1392,8 @@ async def get_pending_personal_reports(user_context: tuple = Depends(get_user_ro
     if role_tier == "Leader" and emp is not None:
         emp_list = data_en.get("employees", [])
         
-        # Build leader categories
-        leader_cats = set()
-        roles = emp.get("roles") or []
-        if not isinstance(roles, list):
-            roles = [roles]
-        units = emp.get("unit") or []
-        if not isinstance(units, list):
-            units = [units]
-        l_type = str(emp.get("leader_type") or "").lower()
-        valid_categories = {'broadcast', 'conductor', 'archive', 'social', 'r&d', 'live', 'playlist', 'helpdesk'}
-        for r in roles:
-            r_clean = str(r).strip().lower()
-            if r_clean in valid_categories:
-                leader_cats.add(r_clean)
-        for u in units:
-            u_clean = str(u).strip().lower()
-            if "social" in u_clean:
-                leader_cats.add("social")
-            for cat in valid_categories:
-                if cat in u_clean:
-                    leader_cats.add(cat)
-        for cat in valid_categories:
-            if cat in l_type:
-                leader_cats.add(cat)
+        # Build leader categories strictly from leadership attributes
+        leader_cats = get_leader_categories(emp)
                 
         scoped_pending = []
         for r in personal_pending:
@@ -1528,34 +1490,16 @@ async def get_report_details(report_id: str, user_context: tuple = Depends(get_u
                                 report_units.add(u)
                                 break
                 if not report_units:
-                    report_units = emp_auth_units
+                    is_cons = r.get("is_consolidated") or r.get("isConsolidated") or False
+                    if is_cons:
+                        report_units = {"general"}
+                    else:
+                        report_units = emp_auth_units
                     
                 if role_tier == "Admin" or user_name.strip().upper() == "RAL":
                     allowed_units = list(report_units)
                 elif role_tier == "Leader" and emp is not None:
-                    leader_cats = set()
-                    roles = emp.get("roles") or []
-                    if not isinstance(roles, list):
-                        roles = [roles]
-                    units = emp.get("unit") or []
-                    if not isinstance(units, list):
-                        units = [units]
-                    l_type = str(emp.get("leader_type") or "").lower()
-                    valid_categories = {'broadcast', 'conductor', 'archive', 'social', 'r&d', 'live', 'playlist', 'helpdesk'}
-                    for roles_r in roles:
-                        r_clean = str(roles_r).strip().lower()
-                        if r_clean in valid_categories:
-                            leader_cats.add(r_clean)
-                    for units_u in units:
-                        u_clean = str(units_u).strip().lower()
-                        if "social" in u_clean:
-                            leader_cats.add("social")
-                        for cat in valid_categories:
-                            if cat in u_clean:
-                                leader_cats.add(cat)
-                    for cat in valid_categories:
-                        if cat in l_type:
-                            leader_cats.add(cat)
+                    leader_cats = get_leader_categories(emp)
                             
                     for u in report_units:
                         is_match = False
@@ -1572,27 +1516,30 @@ async def get_report_details(report_id: str, user_context: tuple = Depends(get_u
             return filtered_r
     raise HTTPException(status_code=404, detail="Report not found")
 
-# 4b. Delete report (Admin only)
+# 4b. Delete report (Admin or Leader for their pending reports)
 @app.delete("/api/reports/{report_id}")
 async def delete_report(report_id: str, user_context: tuple = Depends(get_user_role_context)):
-    """Permanently delete a report by ID (Admin only)"""
+    """Permanently delete a report by ID (Admin or Leader for their pending reports)"""
     user_name, role_tier, emp = user_context
-    if role_tier != "Admin":
-        raise HTTPException(status_code=403, detail="Access denied. Only Administrators can delete reports.")
+    if role_tier == "Employee":
+        raise HTTPException(status_code=403, detail="Access denied. Employees cannot delete reports.")
 
     reports = read_reports()
-    report_found = False
-    new_reports = []
-
-    for r in reports:
-        if r.get('id') == report_id:
-            report_found = True
-        else:
-            new_reports.append(r)
-
-    if not report_found:
+    target_report = next((r for r in reports if r.get('id') == report_id), None)
+    if not target_report:
         raise HTTPException(status_code=404, detail="Report not found")
 
+    if role_tier == "Leader":
+        if target_report.get("status") != "pending":
+            raise HTTPException(status_code=403, detail="Leaders can only delete pending reports.")
+        
+        data_en = read_employees(english=True)
+        emp_list = data_en.get("employees", [])
+        vis = get_report_visibility_for_user(user_name, role_tier, emp, target_report, emp_list)
+        if vis is None:
+            raise HTTPException(status_code=403, detail="Access denied. You can only delete pending reports belonging to your assigned unit.")
+
+    new_reports = [r for r in reports if r.get('id') != report_id]
     if not write_reports(new_reports):
         raise HTTPException(status_code=500, detail="Failed to save changes to database")
 
@@ -1770,37 +1717,19 @@ async def approve_report(report_id: str, approval: ApprovalModel, user_context: 
                     report_units.add(u)
                     break
     if not report_units:
-        # Clean shift: default to employee's authorized units
-        report_units = emp_auth_units
+        # Clean shift: default to employee's authorized units (or general for consolidated reports)
+        is_cons = report_entry.get("is_consolidated") or report_entry.get("isConsolidated") or False
+        if is_cons:
+            report_units = {"general"}
+        else:
+            report_units = emp_auth_units
 
     # Determine allowed units for the reviewer
     if role_tier == "Admin" or user_name.strip().upper() == "RAL":
         allowed_units = report_units
     else:
-        # Leader: check matching categories
-        leader_cats = set()
-        roles = emp.get("roles") or []
-        if not isinstance(roles, list):
-            roles = [roles]
-        units = emp.get("unit") or []
-        if not isinstance(units, list):
-            units = [units]
-        l_type = str(emp.get("leader_type") or "").lower()
-        valid_categories = {'broadcast', 'conductor', 'archive', 'social', 'r&d', 'live', 'playlist', 'helpdesk'}
-        for r in roles:
-            r_clean = str(r).strip().lower()
-            if r_clean in valid_categories:
-                leader_cats.add(r_clean)
-        for u in units:
-            u_clean = str(u).strip().lower()
-            if "social" in u_clean:
-                leader_cats.add("social")
-            for cat in valid_categories:
-                if cat in u_clean:
-                    leader_cats.add(cat)
-        for cat in valid_categories:
-            if cat in l_type:
-                leader_cats.add(cat)
+        # Leader: strictly check matching leadership categories
+        leader_cats = get_leader_categories(emp)
                 
         allowed_units = set()
         for u in report_units:
@@ -1825,9 +1754,15 @@ async def approve_report(report_id: str, approval: ApprovalModel, user_context: 
             raise HTTPException(status_code=403, detail=f"Unauthorized to score for unit '{target_unit}' in this report.")
         score_unit = matched_unit
     else:
-        if len(allowed_units) == 1:
+        # If no unit is specified, check if there is exactly one unapproved unit left among allowed units
+        approved_units = {s.get("unit") for s in report_entry.get("leader_scores", []) if s.get("unit")}
+        unapproved_allowed_units = [u for u in allowed_units if u not in approved_units]
+        
+        if len(unapproved_allowed_units) == 1:
+            score_unit = unapproved_allowed_units[0]
+        elif len(allowed_units) == 1:
             score_unit = list(allowed_units)[0]
-        elif len(allowed_units) > 1:
+        elif len(unapproved_allowed_units) > 1:
             raise HTTPException(status_code=400, detail="Report has multiple units. Please specify which unit you are scoring.")
         else:
             if role_tier == "Admin":
@@ -2232,6 +2167,7 @@ class ConsolidatedReportModel(BaseModel):
     description: Optional[str] = ""
     live_event_name: Optional[str] = None
     live_event_source: Optional[str] = None
+    issues: Optional[List[Dict[str, Any]]] = None
 
 # 7. Add employee (Admin only)
 @app.post("/api/employees")
@@ -2489,22 +2425,81 @@ async def submit_consolidated_report(report: ConsolidatedReportModel, user_conte
     if role_tier == "Employee":
         raise HTTPException(status_code=403, detail="Employees are not authorized to create consolidated leader reports.")
 
+    # Leaders are only authorized to submit reports for their assigned leadership unit(s)
+    if role_tier == "Leader":
+        if not emp:
+            raise HTTPException(status_code=403, detail="Leader profile not found.")
+        leader_cats = get_leader_submission_units(emp)
+
+        def is_unit_authorized(unit_str: str) -> bool:
+            if not unit_str:
+                return True
+            u_clean = str(unit_str).strip().lower()
+            return any(c == u_clean or c in u_clean or u_clean in c for c in leader_cats)
+
+        if report.has_issue == "yes":
+            if report.issues and isinstance(report.issues, list):
+                for iss in report.issues:
+                    if not isinstance(iss, dict):
+                        continue
+                    iss_unit = iss.get("unit") or iss.get("section") or ""
+                    if iss_unit and not is_unit_authorized(iss_unit):
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Leaders can only submit reports for their assigned units. You are not authorized to submit for unit '{iss_unit}'. Your assigned units: {[c.capitalize() for c in leader_cats]}"
+                        )
+            elif report.description and report.section:
+                if not is_unit_authorized(report.section):
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Leaders can only submit reports for their assigned units. You are not authorized to submit for unit '{report.section}'. Your assigned units: {[c.capitalize() for c in leader_cats]}"
+                    )
+
     reports = read_reports()
     report_id = str(uuid.uuid4())
     now_iso = datetime.now().isoformat()
     
     problems = []
-    if report.has_issue == "yes" and report.description:
-        prob = {
-            "type": report.section or "General",
-            "category": report.category or "General",
-            "subcategory": "General",
-            "description": report.description,
-        }
-        if report.live_event_name:
-            prob["live_event_name"] = report.live_event_name
-            prob["live_event_source"] = report.live_event_source or "Controls"
-        problems.append(prob)
+    work_sections = set()
+    if report.has_issue == "yes":
+        if report.issues and isinstance(report.issues, list):
+            for iss in report.issues:
+                if not isinstance(iss, dict):
+                    continue
+                desc = (iss.get("description") or "").strip()
+                if not desc:
+                    continue
+                sec = iss.get("unit") or iss.get("section") or "General"
+                headline = iss.get("headline") or iss.get("subcategory") or iss.get("category") or "General"
+                cat = iss.get("category") or sec
+                prob = {
+                    "type": sec,
+                    "category": cat,
+                    "subcategory": headline,
+                    "headline": headline,
+                    "description": desc,
+                }
+                if iss.get("live_event_name"):
+                    prob["live_event_name"] = iss.get("live_event_name")
+                    prob["live_event_source"] = iss.get("live_event_source") or "Controls"
+                problems.append(prob)
+                work_sections.add(sec)
+        elif report.description:
+            prob = {
+                "type": report.section or "General",
+                "category": report.category or "General",
+                "subcategory": "General",
+                "headline": "General",
+                "description": report.description,
+            }
+            if report.live_event_name:
+                prob["live_event_name"] = report.live_event_name
+                prob["live_event_source"] = report.live_event_source or "Controls"
+            problems.append(prob)
+            work_sections.add(report.section or "General")
+
+    if not work_sections:
+        work_sections.add("General")
 
     emp_data = {
         "name": report.leader_name,
@@ -2531,7 +2526,7 @@ async def submit_consolidated_report(report: ConsolidatedReportModel, user_conte
             "employee_data": emp_data,
             "date": report.period,
             "period": report.period,
-            "work_sections": [report.section if report.has_issue == "yes" else "General"],
+            "work_sections": list(work_sections),
             "problems": problems,
             "rating": 8,
             "mood": "😐 Normal",

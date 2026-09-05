@@ -29,13 +29,93 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ----------------- SEPARATED COLOR-CODE HELPERS -----------------
+    function getRoleBadgeClass(role) {
+        if (!role) return 'badge-role-employee';
+        const r = String(role).toLowerCase().trim();
+        if (r.includes('admin')) return 'badge-role-admin';
+        if (r.includes('leader')) return 'badge-role-leader';
+        return 'badge-role-employee';
+    }
+
+    function getUnitBadgeClass(unit) {
+        if (!unit) return 'badge-unit-general';
+        const u = String(unit).toLowerCase().trim();
+        if (u.includes('broadcast')) return 'badge-unit-broadcast';
+        if (u.includes('social')) return 'badge-unit-social';
+        if (u.includes('conductor')) return 'badge-unit-conductor';
+        if (u.includes('archive')) return 'badge-unit-archive';
+        if (u.includes('r&d') || u.includes('r & d') || u.includes('rd')) return 'badge-unit-rd';
+        if (u.includes('helpdesk')) return 'badge-unit-helpdesk';
+        if (u.includes('playlist')) return 'badge-unit-playlist';
+        return 'badge-unit-general';
+    }
+
+    function getStatusBadgeClass(status) {
+        if (!status) return 'badge-status-pending';
+        const s = String(status).toLowerCase().trim();
+        if (s === 'approved') return 'badge-status-approved';
+        if (s === 'rejected') return 'badge-status-rejected';
+        return 'badge-status-pending';
+    }
+
+    function getScoreBadgeClass(score) {
+        if (score === null || score === undefined || isNaN(score)) return 'badge-secondary';
+        const num = parseFloat(score);
+        if (num >= 8.5) return 'badge-score-exceptional';
+        if (num >= 7.5) return 'badge-score-good';
+        if (num >= 6.0) return 'badge-score-average';
+        return 'badge-score-low';
+    }
+
     // Elements
     const navItems = document.querySelectorAll('.nav-item');
     const tabContents = document.querySelectorAll('.tab-content');
     const viewTitle = document.getElementById('view-title');
     const viewSubtitle = document.getElementById('view-subtitle');
+    const mobileViewTitle = document.getElementById('mobile-view-title');
     const btnRefresh = document.getElementById('btn-refresh');
     
+    // Mobile Navigation Elements
+    const appSidebar = document.getElementById('app-sidebar');
+    const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+    const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+    const btnSidebarClose = document.getElementById('btn-sidebar-close');
+    const mobileBtnRefresh = document.getElementById('mobile-btn-refresh');
+
+    function openMobileSidebar() {
+        if (appSidebar) appSidebar.classList.add('open');
+        if (sidebarBackdrop) sidebarBackdrop.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileSidebar() {
+        if (appSidebar) appSidebar.classList.remove('open');
+        if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    if (mobileMenuToggle) {
+        mobileMenuToggle.addEventListener('click', openMobileSidebar);
+    }
+    if (btnSidebarClose) {
+        btnSidebarClose.addEventListener('click', closeMobileSidebar);
+    }
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeMobileSidebar();
+    });
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 1024) closeMobileSidebar();
+    });
+    if (mobileBtnRefresh) {
+        mobileBtnRefresh.addEventListener('click', () => {
+            if (btnRefresh) btnRefresh.click();
+        });
+    }
+
     // Initialize Lucide Icons
     lucide.createIcons();
 
@@ -105,7 +185,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadConfigData();
                 break;
         }
-        
+
+        if (mobileViewTitle && viewTitle) {
+            mobileViewTitle.innerText = viewTitle.innerText;
+        }
+
+        closeMobileSidebar();
         lucide.createIcons();
     }
 
@@ -141,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (activeUserNameEl) activeUserNameEl.innerText = name || 'User';
         if (activeUserBadgeEl) {
             activeUserBadgeEl.innerText = role || 'Role';
-            activeUserBadgeEl.className = (role === 'Admin' || role === 'Leader') ? 'badge badge-leader' : 'badge badge-secondary';
+            activeUserBadgeEl.className = 'badge ' + getRoleBadgeClass(role);
         }
     }
 
@@ -258,15 +343,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function detectUserRole(userVal) {
-        if (userRole) return userRole;
-        if (!userVal || userVal.toUpperCase() === 'RAL') return 'Admin';
+        if (!userVal) return userRole || 'Employee';
+        const u = userVal.trim().toUpperCase();
+        if (u === 'RAL' || u === 'ADMIN' || u === 'ADMINISTRATOR') return 'Admin';
+        if (userRole === 'Admin' || userRole === 'Leader') return userRole;
         if (employeesData && employeesData.employees) {
-            const emp = employeesData.employees.find(e => (e.name || '').toLowerCase() === userVal.toLowerCase());
-            if (emp && Array.isArray(emp.roles) && emp.roles.includes('Leader')) {
-                return 'Leader';
+            const emp = employeesData.employees.find(e => (e.name || '').trim().toUpperCase() === u || String(e.id) === u);
+            if (emp) {
+                const roles = Array.isArray(emp.roles) ? emp.roles : [emp.roles];
+                const hasLeaderRole = roles.some(r => String(r).toLowerCase().includes('leader'));
+                if (emp.leader_type || hasLeaderRole) {
+                    return 'Leader';
+                }
             }
         }
-        return 'Employee';
+        return userRole || 'Employee';
     }
 
     function applyRolePermissions() {
@@ -693,21 +784,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = document.createElement('tr');
             const rankBadge = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `<span style="color:#9ca3af;">#${idx + 1}</span>`;
             const ratingBadge = emp.avg_rating > 0 
-                ? `<span class="badge badge-primary font-semibold" style="font-size:0.85rem;">⭐ ${emp.avg_rating} / 10</span>` 
+                ? `<span class="badge ${getScoreBadgeClass(emp.avg_rating)} font-semibold" style="font-size:0.85rem;">⭐ ${emp.avg_rating} / 10</span>` 
                 : `<span class="text-secondary small">N/A</span>`;
             
             const missingBadge = emp.missing_reports === 0 
-                ? `<span class="badge badge-emerald font-semibold">0 days (Perfect)</span>` 
+                ? `<span class="badge badge-clean-shift font-semibold">0 days (Perfect)</span>` 
                 : `<span class="badge badge-amber font-semibold">${emp.missing_reports} days</span>`;
 
             tr.innerHTML = `
                 <td class="font-bold" style="font-size: 1.1rem; text-align: center;">${rankBadge}</td>
                 <td class="font-semibold" style="color: #ffffff; font-size: 0.95rem;">${emp.name}</td>
-                <td class="font-semibold" style="color: #38bdf8; font-size: 0.9rem;">${emp.unit || '-'}</td>
+                <td><span class="badge ${getUnitBadgeClass(emp.unit)}">${emp.unit || '-'}</span></td>
                 <td>${ratingBadge}</td>
                 <td>${missingBadge}</td>
                 <td style="color: #ffffff; font-weight: 600;">${emp.reports}</td>
-                <td><span class="badge ${emp.problems > 0 ? 'badge-rose' : 'badge-emerald'}">${emp.problems}</span></td>
+                <td><span class="badge ${emp.problems > 0 ? 'badge-incident' : 'badge-clean-shift'}">${emp.problems > 0 ? emp.problems + ' Incidents' : 'Clean'}</span></td>
             `;
             tbody.appendChild(tr);
         });
@@ -1056,35 +1147,52 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Format unit
             const empData = reportData.employee_data || {};
-            let unitText = empData.unit || reportData.unit || 'Unknown';
-            if (Array.isArray(unitText)) unitText = unitText.join(', ');
+            let unitText = empData.unit || reportData.unit || 'General';
+            let unitBadge = '';
+            if (Array.isArray(unitText)) {
+                unitBadge = unitText.map(u => `<span class="badge ${getUnitBadgeClass(u)}">${u}</span>`).join(' ');
+            } else {
+                unitBadge = `<span class="badge ${getUnitBadgeClass(unitText)}">${unitText}</span>`;
+            }
             
             // Format problems badge
             const problems = reportData.problems || [];
-            let problemBadge = '<span class="badge badge-emerald">Normal</span>';
+            let problemBadge = '<span class="badge badge-clean-shift">✅ Clean</span>';
             if (problems.length > 0) {
-                problemBadge = `<span class="badge badge-rose">${problems.length} Incident(s)</span>`;
+                problemBadge = `<span class="badge badge-incident">⚠️ ${problems.length} Incident(s)</span>`;
             }
+
+            const selfRatingBadge = reportData.rating 
+                ? `<span class="badge ${getScoreBadgeClass(reportData.rating)}">${reportData.rating}</span>`
+                : `<span class="text-secondary small">-</span>`;
             
+            const mgrRatingBadge = r.manager_rating 
+                ? `<span class="badge ${getScoreBadgeClass(r.manager_rating)}">${r.manager_rating}</span>`
+                : `<span class="badge badge-status-pending">Pending</span>`;
+            
+            const currentRole = (userRole || detectUserRole(currentUser) || '').trim().toLowerCase();
+            const isAdmin = currentRole === 'admin' || (currentUser && currentUser.trim().toUpperCase() === 'RAL');
+            const isLeader = currentRole === 'leader';
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${dateStr}</td>
                 <td class="font-semibold">${reportData.employee || 'Unknown'}</td>
-                <td>${unitText}</td>
+                <td>${unitBadge}</td>
                 <td>${problemBadge}</td>
-                <td>${reportData.rating || '-'}</td>
-                <td class="font-semibold">${r.manager_rating || '-'}</td>
+                <td>${selfRatingBadge}</td>
+                <td>${mgrRatingBadge}</td>
                 <td>
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-secondary btn-icon-only btn-view" data-id="${r.id}" title="${userRole === 'Admin' ? 'View / Edit Details' : 'View Details'}">
-                            <i data-lucide="${userRole === 'Admin' ? 'edit-3' : 'eye'}"></i>
+                        <button class="btn btn-secondary btn-icon-only btn-view" data-id="${r.id}" title="${isAdmin ? 'View / Edit Details' : 'View Details'}">
+                            <i data-lucide="${isAdmin ? 'edit-3' : 'eye'}"></i>
                         </button>
-                        ${r.status === 'pending' && userRole !== 'Admin' ? `
+                        ${r.status === 'pending' && !isAdmin ? `
                             <button class="btn btn-success btn-icon-only btn-review" data-id="${r.id}" title="Review & Approve">
                                 <i data-lucide="check-square"></i>
                             </button>
                         ` : ''}
-                        ${userRole === 'Admin' ? `
+                        ${(isAdmin || (isLeader && r.status === 'pending')) ? `
                             <button class="btn btn-danger btn-icon-only btn-delete" data-id="${r.id}" title="Delete Report">
                                 <i data-lucide="trash-2"></i>
                             </button>
@@ -1152,6 +1260,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
         container.innerHTML = '';
         
+        const currentRole = (userRole || detectUserRole(currentUser) || '').trim().toLowerCase();
+        const isAdmin = currentRole === 'admin' || (currentUser && currentUser.trim().toUpperCase() === 'RAL');
+        const isLeader = currentRole === 'leader';
+        const canDelete = isAdmin || isLeader;
+
         if (queue.length === 0) {
             container.innerHTML = `
                 <div class="card text-center text-secondary py-5">
@@ -1176,9 +1289,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const problems = r.problems || reportData.problems || [];
             let problemHtml = '';
             if (problems.length > 0) {
-                problemHtml = `<div class="pending-issues text-rose font-semibold">⚠️ Issues: ${problems.map(p => (p.type || p.category || 'General') + (p.subtype ? ' > ' + p.subtype : '')).join(', ')}</div>`;
+                problemHtml = `<div class="pending-issues mt-2"><span class="badge badge-incident">⚠️ Issues: ${problems.map(p => (p.type || p.category || 'General') + (p.subtype ? ' > ' + p.subtype : '')).join(', ')}</span></div>`;
             } else {
-                problemHtml = `<div class="pending-issues text-emerald font-semibold">✅ Shift completed with no reported issues</div>`;
+                problemHtml = `<div class="pending-issues mt-2"><span class="badge badge-clean-shift">✅ Clean Shift</span></div>`;
             }
             
             const div = document.createElement('div');
@@ -1187,7 +1300,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="pending-info">
                     <h3 style="display: flex; align-items: center; gap: 8px;">
                         <span>${employeeName}</span>
-                        ${isConsolidated ? '<span class="badge badge-leader" style="font-size:0.75rem;">Consolidated</span>' : ''}
+                        ${isConsolidated ? '<span class="badge badge-role-leader" style="font-size:0.75rem;">Consolidated</span>' : ''}
                     </h3>
                     <div class="pending-meta">
                         <span><i data-lucide="calendar" style="width: 14px; height: 14px; display: inline; vertical-align: sub; margin-right: 4px;"></i>${dateStr}</span>
@@ -1204,8 +1317,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <i data-lucide="check-circle-2"></i>
                         <span>Review & Rate</span>
                     </button>
-                    ${userRole === 'Admin' ? `
-                    <button class="btn btn-danger btn-delete-action" data-id="${r.id}">
+                    ${canDelete ? `
+                    <button class="btn btn-danger btn-delete-action" data-id="${r.id}" title="Delete Report">
                         <i data-lucide="trash-2"></i>
                         <span>Delete</span>
                     </button>
@@ -1253,7 +1366,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 message: "Report deleted successfully.",
                                 type: "success"
                             });
-                            await loadPendingQueue();
+                            await loadPendingPersonalQueue();
+                            await loadReportsData();
+                            await loadDashboardStats();
                         }
                     } catch (err) {
                         await showCustomAlert({
@@ -1309,11 +1424,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (sup) supervisorLabel = sup.name;
             }
 
+            const unitBadges = Array.isArray(emp.unit) 
+                ? emp.unit.map(u => `<span class="badge ${getUnitBadgeClass(u)}">${u}</span>`).join(' ') 
+                : `<span class="badge ${getUnitBadgeClass(emp.unit)}">${emp.unit || '-'}</span>`;
+
+            const roleBadges = Array.isArray(emp.roles) 
+                ? emp.roles.map(r => `<span class="badge ${r === 'Leader' ? 'badge-role-leader' : 'badge-role-employee'}">${r === 'Leader' ? `Leader (${emp.leader_type || 'General'}${emp.leader_shift ? ' - ' + emp.leader_shift : ''})` : r}</span>`).join(' ') 
+                : `<span class="badge ${getRoleBadgeClass(emp.roles)}">${emp.roles || '-'}</span>`;
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="font-semibold">${emp.name}</td>
-                <td>${Array.isArray(emp.unit) ? emp.unit.join(', ') : emp.unit}</td>
-                <td>${Array.isArray(emp.roles) ? emp.roles.map(r => r === 'Leader' ? `Leader (${emp.leader_type || 'General'}${emp.leader_shift ? ' - ' + emp.leader_shift : ''})` : r).join(', ') : (emp.roles || '-')}</td>
+                <td>${unitBadges}</td>
+                <td>${roleBadges}</td>
                 <td>${supervisorLabel}</td>
                 <td>${emp.work_location}</td>
                 <td class="small">${emp.work_hours}</td>
@@ -1679,6 +1802,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 type: "success"
                             });
                             await loadReportsData();
+                            await loadPendingPersonalQueue();
+                            await loadDashboardStats();
                         } else {
                             const errData = await res.json().catch(() => ({}));
                             await showCustomAlert({
@@ -1907,11 +2032,22 @@ document.addEventListener('DOMContentLoaded', () => {
             ${managerFeedbackHtml}
         `;
         
-        // Dynamically build footer with Edit Report action for Admins
+        const currentRole = (userRole || detectUserRole(currentUser) || '').trim().toLowerCase();
+        const isAdmin = currentRole === 'admin' || (currentUser && currentUser.trim().toUpperCase() === 'RAL');
+        const isLeader = currentRole === 'leader';
+        const canDelete = isAdmin || (isLeader && report.status === 'pending');
+
+        // Dynamically build footer with Edit Report action for Admins and Delete action
         const footerContainer = document.getElementById('report-modal-footer');
         footerContainer.innerHTML = `
+            ${canDelete ? `
+                <button class="btn btn-danger btn-delete-from-modal" data-id="${report.id}" style="margin-right: auto;">
+                    <i data-lucide="trash-2"></i>
+                    <span>Delete Report</span>
+                </button>
+            ` : ''}
             <button class="btn btn-secondary btn-close-modal-btn">Close</button>
-            ${userRole === 'Admin' ? `
+            ${isAdmin ? `
                 <button class="btn btn-primary btn-edit-from-modal">
                     <i data-lucide="edit-3"></i>
                     <span>Edit Report</span>
@@ -1927,12 +2063,53 @@ document.addEventListener('DOMContentLoaded', () => {
             reportModal.classList.remove('active');
         });
         
-        // Wire up Edit button
-        if (userRole === 'Admin') {
-            footerContainer.querySelector('.btn-edit-from-modal').addEventListener('click', () => {
-                reportModal.classList.remove('active');
-                openEditReportModal(report.id);
+        // Wire up Delete button from modal
+        const btnDeleteModal = footerContainer.querySelector('.btn-delete-from-modal');
+        if (btnDeleteModal) {
+            btnDeleteModal.addEventListener('click', async () => {
+                const confirmDelete = await showCustomConfirm({
+                    title: "Delete Report",
+                    message: "Are you sure you want to permanently delete this report?",
+                    confirmText: "Yes, Delete",
+                    cancelText: "Cancel",
+                    isDanger: true
+                });
+                if (confirmDelete) {
+                    try {
+                        const res = await apiRequest(`/api/reports/${report.id}`, {
+                            method: 'DELETE'
+                        });
+                        if (res) {
+                            reportModal.classList.remove('active');
+                            await showCustomAlert({
+                                title: "Success",
+                                message: "Report deleted successfully.",
+                                type: "success"
+                            });
+                            await loadPendingPersonalQueue();
+                            await loadReportsData();
+                            await loadDashboardStats();
+                        }
+                    } catch (err) {
+                        await showCustomAlert({
+                            title: "Error",
+                            message: "Failed to delete the report: " + err.message,
+                            type: "danger"
+                        });
+                    }
+                }
             });
+        }
+
+        // Wire up Edit button
+        if (isAdmin) {
+            const btnEdit = footerContainer.querySelector('.btn-edit-from-modal');
+            if (btnEdit) {
+                btnEdit.addEventListener('click', () => {
+                    reportModal.classList.remove('active');
+                    openEditReportModal(report.id);
+                });
+            }
         }
         
         // Listen to Quick review button inside modal if pending (for Leaders/non-admins)
@@ -1988,6 +2165,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const approvedUnits = report.approved_units || [];
         const pendingReviewUnits = allowedUnits.filter(u => !approvedUnits.includes(u));
         
+        const approvalForm = document.getElementById('approval-form');
+        approvalForm.setAttribute('data-pending-units', JSON.stringify(pendingReviewUnits));
+        
         if (pendingReviewUnits.length > 1) {
             unitContainer.style.display = 'block';
             unitSelect.innerHTML = pendingReviewUnits.map(u => `<option value="${u}">${u}</option>`).join('');
@@ -1996,11 +2176,50 @@ document.addEventListener('DOMContentLoaded', () => {
             unitSelect.innerHTML = '';
         }
         
-        // Reset inputs
-        ratingInput.value = 8;
-        ratingBadge.innerText = "8 / 10";
-        document.getElementById('approval-comment').value = "";
-        
+        // Setup Delete button in Approval modal
+        const currentRole = (userRole || detectUserRole(currentUser) || '').trim().toLowerCase();
+        const isAdmin = currentRole === 'admin' || (currentUser && currentUser.trim().toUpperCase() === 'RAL');
+        const isLeader = currentRole === 'leader';
+        const canDelete = isAdmin || (isLeader && report.status === 'pending');
+
+        const btnApprovalDelete = document.getElementById('btn-approval-delete');
+        if (btnApprovalDelete) {
+            btnApprovalDelete.style.display = canDelete ? 'inline-flex' : 'none';
+            btnApprovalDelete.onclick = async () => {
+                const confirmDelete = await showCustomConfirm({
+                    title: "Delete Report",
+                    message: "Are you sure you want to permanently delete this report?",
+                    confirmText: "Yes, Delete",
+                    cancelText: "Cancel",
+                    isDanger: true
+                });
+                if (confirmDelete) {
+                    try {
+                        const res = await apiRequest(`/api/reports/${reportId}`, {
+                            method: 'DELETE'
+                        });
+                        if (res) {
+                            approvalModal.classList.remove('active');
+                            await showCustomAlert({
+                                title: "Success",
+                                message: "Report deleted successfully.",
+                                type: "success"
+                            });
+                            await loadPendingPersonalQueue();
+                            await loadReportsData();
+                            await loadDashboardStats();
+                        }
+                    } catch (err) {
+                        await showCustomAlert({
+                            title: "Error",
+                            message: "Failed to delete the report: " + err.message,
+                            type: "danger"
+                        });
+                    }
+                }
+            };
+        }
+
         lucide.createIcons();
         approvalModal.classList.add('active');
     }
@@ -2013,10 +2232,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const managerRating = parseInt(ratingInput.value);
         const managerComment = document.getElementById('approval-comment').value.trim();
         
+        const approvalForm = document.getElementById('approval-form');
+        const pendingUnitsRaw = approvalForm.getAttribute('data-pending-units');
+        const pendingReviewUnits = pendingUnitsRaw ? JSON.parse(pendingUnitsRaw) : [];
+        
         const unitSelect = document.getElementById('approval-unit');
         let selectedUnit = null;
         if (unitSelect && unitSelect.value) {
             selectedUnit = unitSelect.value;
+        }
+        if (!selectedUnit && pendingReviewUnits.length === 1) {
+            selectedUnit = pendingReviewUnits[0];
         }
         
         const payload = {
@@ -4806,6 +5032,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Multi-Select Team Member Controller for Consolidated Leader Report
     let selectedConsolidatedMemberIds = [];
     let currentConsolidatedTeamMembers = [];
+    let currentConsolidatedLeaderSections = [];
 
     function renderConsolidatedMembersDropdown(teamMembers) {
         currentConsolidatedTeamMembers = teamMembers || [];
@@ -5006,24 +5233,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (leaderNameEl) leaderNameEl.value = leader.name;
             if (periodEl) periodEl.value = new Date().toISOString().split('T')[0];
 
-            // Populate #consolidated-section select with available roles
-            const sectionSelect = document.getElementById('consolidated-section');
-            if (sectionSelect) {
-                sectionSelect.innerHTML = '';
-                const rolesList = (configRoles && configRoles.length > 0) ? configRoles.filter(r => r !== 'Leader') : ["Live", "Playlist", "Helpdesk", "Social", "Conductor", "Archive", "R&D"];
-                rolesList.forEach(sec => {
-                    const opt = document.createElement('option');
-                    opt.value = sec;
-                    opt.innerText = sec;
-                    sectionSelect.appendChild(opt);
-                });
-                if (sectionSelect.options.length > 0) {
-                    sectionSelect.selectedIndex = 0;
-                }
-                updateConsolidatedLiveEventFieldsVisibility();
-            }
+            // Reset issues container and set default has-issue value to 'no'
+            const issuesContainer = document.getElementById('consolidated-issues-list');
+            if (issuesContainer) issuesContainer.innerHTML = '';
 
-            // Set default has-issue value to 'no'
             const hasIssueEl = document.getElementById('consolidated-has-issue');
             if (hasIssueEl) hasIssueEl.value = 'no';
             updateConsolidatedHasIssueVisibility();
@@ -5039,6 +5252,50 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedConsolidatedMemberIds = teamMembers.map(m => String(m.id));
             updateConsolidatedMembersUI();
 
+            // Compute authorized units/sections for this leader
+            let allowedSections = [];
+            if (userRole === 'Admin' || currentUser?.toUpperCase() === 'RAL') {
+                allowedSections = (configRoles && configRoles.length > 0) ? configRoles.filter(r => r !== 'Leader') : ["Broadcast", "Social", "Conductor", "Archive", "R&D", "Live", "Playlist", "Helpdesk"];
+            } else {
+                const candidateUnits = new Set();
+                const lType = String(leader.leader_type || '').trim().toLowerCase();
+                const leaderRoles = Array.isArray(leader.roles) ? leader.roles : (leader.roles ? [leader.roles] : []);
+                
+                // 1. Check leader_type (e.g. "social leader")
+                if (lType) {
+                    if (lType.includes('social')) candidateUnits.add('Social');
+                    if (lType.includes('broadcast')) candidateUnits.add('Broadcast');
+                    if (lType.includes('conductor')) candidateUnits.add('Conductor');
+                    if (lType.includes('archive')) candidateUnits.add('Archive');
+                    if (lType.includes('r&d') || lType.includes('research') || lType.includes('rd')) candidateUnits.add('R&D');
+                    if (lType.includes('live')) candidateUnits.add('Live');
+                    if (lType.includes('playlist')) candidateUnits.add('Playlist');
+                    if (lType.includes('helpdesk')) candidateUnits.add('Helpdesk');
+                }
+
+                // 2. Check explicit leader roles (e.g. "Social Leader", "Broadcast Leader")
+                leaderRoles.forEach(r => {
+                    const rLower = String(r).trim().toLowerCase();
+                    if (rLower.includes('leader') && rLower !== 'leader') {
+                        if (rLower.includes('social')) candidateUnits.add('Social');
+                        else if (rLower.includes('broadcast')) candidateUnits.add('Broadcast');
+                        else if (rLower.includes('conductor')) candidateUnits.add('Conductor');
+                        else if (rLower.includes('archive')) candidateUnits.add('Archive');
+                        else if (rLower.includes('r&d') || rLower.includes('research') || rLower.includes('rd')) candidateUnits.add('R&D');
+                        else if (rLower.includes('live')) candidateUnits.add('Live');
+                        else if (rLower.includes('playlist')) candidateUnits.add('Playlist');
+                        else if (rLower.includes('helpdesk')) candidateUnits.add('Helpdesk');
+                    }
+                });
+
+                // Strictly use leadership units (no fallback to employee operational units)
+                allowedSections = Array.from(candidateUnits);
+                if (allowedSections.length === 0) {
+                    allowedSections = ["Broadcast"];
+                }
+            }
+            currentConsolidatedLeaderSections = allowedSections;
+
             const notesEl = document.getElementById('consolidated-summary-notes');
             if (notesEl) notesEl.value = '';
             if (modalEl) modalEl.classList.add('active');
@@ -5049,39 +5306,150 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function createLeaderIssueCard(initialData = {}) {
+        const issuesContainer = document.getElementById('consolidated-issues-list');
+        if (!issuesContainer) return null;
+
+        const currentCount = issuesContainer.querySelectorAll('.consolidated-issue-card').length;
+        const issueNum = currentCount + 1;
+
+        const card = document.createElement('div');
+        card.className = 'consolidated-issue-card';
+        card.style.cssText = 'background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 8px;';
+
+        const sections = (currentConsolidatedLeaderSections && currentConsolidatedLeaderSections.length > 0)
+            ? currentConsolidatedLeaderSections
+            : ((configRoles && configRoles.length > 0) ? configRoles.filter(r => r !== 'Leader') : ["Broadcast", "Social", "Conductor", "Archive", "R&D"]);
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="badge badge-rose font-semibold issue-card-number">Issue #${issueNum}</span>
+                </div>
+                <button type="button" class="btn btn-outline-danger btn-sm btn-remove-leader-issue" style="padding: 4px 10px; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;" title="Remove Issue">
+                    <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                    <span>Remove Issue</span>
+                </button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group mb-0">
+                    <label class="small font-semibold mb-1" style="display: block;">Unit / Section *</label>
+                    <select class="form-control consolidated-issue-unit" required>
+                        ${sections.map(s => `<option value="${s}" ${initialData.unit === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group mb-0">
+                    <label class="small font-semibold mb-1" style="display: block;">Headline / Subcategory *</label>
+                    <input type="text" class="form-control consolidated-issue-headline" placeholder="e.g. Video Switcher Glitch, Audio Loss" value="${initialData.headline || ''}" required>
+                </div>
+            </div>
+
+            <!-- Live Event fields (shown conditionally if Live selected) -->
+            <div class="consolidated-issue-live-fields p-2 mb-2" style="display: none; background: rgba(99, 102, 241, 0.05); border: 1px dashed rgba(99, 102, 241, 0.3); border-radius: 6px;">
+                <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 10px;">
+                    <div class="form-group mb-0">
+                        <label class="small mb-1" style="display: block;">Live Event / Broadcast Name</label>
+                        <input type="text" class="form-control form-control-sm consolidated-issue-live-name" placeholder="e.g. Daily Live Stream" value="${initialData.live_event_name || ''}">
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="small mb-1" style="display: block;">Live Source</label>
+                        <select class="form-control form-control-sm consolidated-issue-live-source">
+                            <option value="Controls" ${initialData.live_event_source === 'Controls' ? 'selected' : ''}>Controls</option>
+                            <option value="Servers" ${initialData.live_event_source === 'Servers' ? 'selected' : ''}>Servers</option>
+                            <option value="Internet" ${initialData.live_event_source === 'Internet' ? 'selected' : ''}>Internet</option>
+                            <option value="Other" ${initialData.live_event_source === 'Other' ? 'selected' : ''}>Other</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group mb-0">
+                <label class="small font-semibold mb-1" style="display: block;">Problem Description *</label>
+                <textarea rows="2" class="form-control consolidated-issue-description" placeholder="Describe what happened, impact, or corrective actions taken..." required>${initialData.description || ''}</textarea>
+            </div>
+        `;
+
+        // Wire up unit change listener for live fields toggle
+        const unitSelect = card.querySelector('.consolidated-issue-unit');
+        const liveFields = card.querySelector('.consolidated-issue-live-fields');
+        const updateLiveVisibility = () => {
+            const val = (unitSelect.value || '').toLowerCase();
+            if (val.includes('live')) {
+                liveFields.style.display = 'block';
+            } else {
+                liveFields.style.display = 'none';
+            }
+        };
+        unitSelect.addEventListener('change', updateLiveVisibility);
+        updateLiveVisibility();
+
+        // Wire up remove button
+        const removeBtn = card.querySelector('.btn-remove-leader-issue');
+        removeBtn.addEventListener('click', () => {
+            card.remove();
+            reindexLeaderIssues();
+        });
+
+        issuesContainer.appendChild(card);
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            lucide.createIcons({ root: card });
+        }
+        updateLeaderIssuesCountBadge();
+        return card;
+    }
+
+    function reindexLeaderIssues() {
+        const issuesContainer = document.getElementById('consolidated-issues-list');
+        if (!issuesContainer) return;
+
+        const cards = issuesContainer.querySelectorAll('.consolidated-issue-card');
+        if (cards.length === 0) {
+            // If all issues were removed, automatically re-add Issue #1
+            createLeaderIssueCard();
+        } else {
+            cards.forEach((c, idx) => {
+                const badge = c.querySelector('.issue-card-number');
+                if (badge) badge.innerText = `Issue #${idx + 1}`;
+            });
+        }
+        updateLeaderIssuesCountBadge();
+    }
+
+    function updateLeaderIssuesCountBadge() {
+        const issuesContainer = document.getElementById('consolidated-issues-list');
+        const badge = document.getElementById('consolidated-issues-count-badge');
+        if (!issuesContainer || !badge) return;
+
+        const count = issuesContainer.querySelectorAll('.consolidated-issue-card').length;
+        badge.innerText = `${count} ${count === 1 ? 'Issue' : 'Issues'}`;
+    }
+
     function updateConsolidatedHasIssueVisibility() {
         const hasIssueEl = document.getElementById('consolidated-has-issue');
         const probContainer = document.getElementById('consolidated-problem-details-container');
-        const descInput = document.getElementById('consolidated-description');
+        const issuesContainer = document.getElementById('consolidated-issues-list');
         if (!hasIssueEl || !probContainer) return;
 
         if (hasIssueEl.value === 'yes') {
             probContainer.style.display = 'block';
-            if (descInput) descInput.required = true;
+            if (issuesContainer && issuesContainer.querySelectorAll('.consolidated-issue-card').length === 0) {
+                createLeaderIssueCard();
+            }
         } else {
             probContainer.style.display = 'none';
-            if (descInput) {
-                descInput.required = false;
-                descInput.value = '';
+            if (issuesContainer) {
+                issuesContainer.innerHTML = '';
             }
-        }
-    }
-
-    function updateConsolidatedLiveEventFieldsVisibility() {
-        const sectionSelect = document.getElementById('consolidated-section');
-        const liveFields = document.getElementById('consolidated-live-event-fields');
-        if (!sectionSelect || !liveFields) return;
-
-        const val = (sectionSelect.value || '').toLowerCase();
-        if (val.includes('live')) {
-            liveFields.style.display = 'block';
-        } else {
-            liveFields.style.display = 'none';
+            updateLeaderIssuesCountBadge();
         }
     }
 
     document.getElementById('consolidated-has-issue')?.addEventListener('change', updateConsolidatedHasIssueVisibility);
-    document.getElementById('consolidated-section')?.addEventListener('change', updateConsolidatedLiveEventFieldsVisibility);
+    document.getElementById('btn-consolidated-add-issue')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        createLeaderIssueCard();
+    });
 
     // Global Event Delegation for Submit Report buttons
     document.addEventListener('click', (e) => {
@@ -5371,30 +5739,77 @@ document.addEventListener('DOMContentLoaded', () => {
         const period = document.getElementById('consolidated-period').value.trim();
         const notes = document.getElementById('consolidated-summary-notes').value.trim();
         const hasIssue = document.getElementById('consolidated-has-issue')?.value || 'no';
-        const sectionEl = document.getElementById('consolidated-section');
-        const section = sectionEl ? sectionEl.value : 'General';
-        const category = document.getElementById('consolidated-category')?.value || 'General';
-        const description = document.getElementById('consolidated-description')?.value.trim() || '';
-        const liveName = document.getElementById('consolidated-live-name')?.value.trim() || null;
-        const liveSource = document.getElementById('consolidated-live-source')?.value || 'Controls';
 
-        if (hasIssue === 'yes' && !description) {
-            await showCustomAlert({ title: "Validation Error", message: "Please describe the problem that occurred for the team.", type: "warning" });
-            return;
+        let issuesList = [];
+        if (hasIssue === 'yes') {
+            const cards = document.querySelectorAll('#consolidated-issues-list .consolidated-issue-card');
+            if (cards.length === 0) {
+                await showCustomAlert({
+                    title: "Validation Error",
+                    message: "Please add at least one issue or set 'Did any problem or incident occur?' to No.",
+                    type: "warning"
+                });
+                return;
+            }
+
+            for (let i = 0; i < cards.length; i++) {
+                const card = cards[i];
+                const unit = card.querySelector('.consolidated-issue-unit')?.value || 'General';
+                const headline = (card.querySelector('.consolidated-issue-headline')?.value || '').trim();
+                const description = (card.querySelector('.consolidated-issue-description')?.value || '').trim();
+                const isLive = unit.toLowerCase().includes('live');
+                const liveName = isLive ? (card.querySelector('.consolidated-issue-live-name')?.value || '').trim() : null;
+                const liveSource = isLive ? (card.querySelector('.consolidated-issue-live-source')?.value || 'Controls') : null;
+
+                if (!headline) {
+                    await showCustomAlert({
+                        title: "Validation Error",
+                        message: `Please specify the Headline / Subcategory for Issue #${i + 1}.`,
+                        type: "warning"
+                    });
+                    const headInput = card.querySelector('.consolidated-issue-headline');
+                    if (headInput) headInput.focus();
+                    return;
+                }
+
+                if (!description) {
+                    await showCustomAlert({
+                        title: "Validation Error",
+                        message: `Please describe the problem for Issue #${i + 1}.`,
+                        type: "warning"
+                    });
+                    const descInput = card.querySelector('.consolidated-issue-description');
+                    if (descInput) descInput.focus();
+                    return;
+                }
+
+                issuesList.push({
+                    unit: unit,
+                    section: unit,
+                    headline: headline,
+                    category: unit,
+                    subcategory: headline,
+                    description: description,
+                    live_event_name: liveName,
+                    live_event_source: liveSource
+                });
+            }
         }
 
-        const isLive = hasIssue === 'yes' && section && typeof section === 'string' && section.toLowerCase().includes('live');
+        const firstIssue = issuesList[0] || {};
         const payload = {
             leader_name: leaderName,
             period: period,
             summary_notes: notes,
             included_report_ids: selectedConsolidatedMemberIds,
             has_issue: hasIssue,
-            section: hasIssue === 'yes' ? section : 'General',
-            category: hasIssue === 'yes' ? category : 'General',
-            description: hasIssue === 'yes' ? description : '',
-            live_event_name: isLive ? liveName : null,
-            live_event_source: isLive ? liveSource : null
+            issues: issuesList,
+            // Legacy single-issue fields for full backward compatibility
+            section: hasIssue === 'yes' ? (firstIssue.unit || 'General') : 'General',
+            category: hasIssue === 'yes' ? (firstIssue.unit || 'General') : 'General',
+            description: hasIssue === 'yes' ? (firstIssue.description || '') : '',
+            live_event_name: firstIssue.live_event_name || null,
+            live_event_source: firstIssue.live_event_source || null
         };
 
         const result = await apiRequest('/api/reports/consolidated', {
