@@ -92,23 +92,64 @@ document.addEventListener('DOMContentLoaded', () => {
     function closeMobileSidebar() {
         if (appSidebar) appSidebar.classList.remove('open');
         if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
-        document.body.style.overflow = '';
+        if (!document.querySelector('.modal-overlay.active')) {
+            document.body.style.overflow = '';
+        }
     }
 
     if (mobileMenuToggle) {
-        mobileMenuToggle.addEventListener('click', openMobileSidebar);
+        mobileMenuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openMobileSidebar();
+        });
     }
     if (btnSidebarClose) {
-        btnSidebarClose.addEventListener('click', closeMobileSidebar);
+        btnSidebarClose.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeMobileSidebar();
+        });
     }
     if (sidebarBackdrop) {
-        sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+        sidebarBackdrop.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeMobileSidebar();
+        });
     }
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeMobileSidebar();
+        if (e.key === 'Escape') {
+            closeMobileSidebar();
+            const activeModals = Array.from(document.querySelectorAll('.modal-overlay.active'));
+            if (activeModals.length > 0) {
+                const topModal = activeModals[activeModals.length - 1];
+                if (topModal.id !== 'custom-prompt-modal' && topModal.id !== 'custom-confirm-modal') {
+                    topModal.classList.remove('active');
+                    if (activeModals.length === 1) {
+                        document.body.style.overflow = '';
+                    }
+                }
+            }
+        }
     });
+    let resizeFrameId = null;
     window.addEventListener('resize', () => {
         if (window.innerWidth >= 1024) closeMobileSidebar();
+        if (resizeFrameId) cancelAnimationFrame(resizeFrameId);
+        resizeFrameId = requestAnimationFrame(() => {
+            try {
+                if (moodChartRef && typeof moodChartRef.resize === 'function') moodChartRef.resize();
+                if (categoriesChartRef && typeof categoriesChartRef.resize === 'function') categoriesChartRef.resize();
+                if (missingReportsChartRef && typeof missingReportsChartRef.resize === 'function') missingReportsChartRef.resize();
+            } catch (e) {}
+        });
+    });
+    window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+            try {
+                if (moodChartRef && typeof moodChartRef.resize === 'function') moodChartRef.resize();
+                if (categoriesChartRef && typeof categoriesChartRef.resize === 'function') categoriesChartRef.resize();
+                if (missingReportsChartRef && typeof missingReportsChartRef.resize === 'function') missingReportsChartRef.resize();
+            } catch (e) {}
+        }, 150);
     });
     if (mobileBtnRefresh) {
         mobileBtnRefresh.addEventListener('click', () => {
@@ -734,13 +775,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderUnitChampions(champions) {
         const grid = document.getElementById('unit-champions-grid');
         if (!grid) return;
-        grid.innerHTML = '';
 
         if (!champions || champions.length === 0) {
-            grid.innerHTML = `<p class="text-secondary small">No department champions available</p>`;
+            const emptyP = document.createElement('p');
+            emptyP.className = 'text-secondary small';
+            emptyP.innerText = 'No department champions available';
+            grid.replaceChildren(emptyP);
             return;
         }
 
+        const frag = document.createDocumentFragment();
         champions.forEach(champ => {
             const card = document.createElement('div');
             card.className = 'champion-card';
@@ -767,19 +811,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span style="color: ${champ.missing_reports === 0 ? '#10b981' : '#f59e0b'};">🎯 <strong>${champ.missing_reports}d</strong> miss</span>
                 </div>
             `;
-            grid.appendChild(card);
+            frag.appendChild(card);
         });
+        grid.replaceChildren(frag);
     }
 
     function renderLeaderboard(leaderboard) {
         const tbody = document.querySelector('#leaderboard-table tbody');
-        tbody.innerHTML = '';
+        if (!tbody) return;
         
         if (!leaderboard || leaderboard.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary">No active employees found</td></tr>`;
+            const emptyTr = document.createElement('tr');
+            emptyTr.innerHTML = '<td colspan="7" class="text-center text-secondary">No active employees found</td>';
+            tbody.replaceChildren(emptyTr);
             return;
         }
         
+        const frag = document.createDocumentFragment();
         leaderboard.forEach((emp, idx) => {
             const tr = document.createElement('tr');
             const rankBadge = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `<span style="color:#9ca3af;">#${idx + 1}</span>`;
@@ -800,8 +848,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="color: #ffffff; font-weight: 600;">${emp.reports}</td>
                 <td><span class="badge ${emp.problems > 0 ? 'badge-incident' : 'badge-clean-shift'}">${emp.problems > 0 ? emp.problems + ' Incidents' : 'Clean'}</span></td>
             `;
-            tbody.appendChild(tr);
+            frag.appendChild(tr);
         });
+        tbody.replaceChildren(frag);
     }
 
     async function renderDashboardCharts(stats) {
@@ -1284,6 +1333,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateStr = date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
             
             const employeeName = isConsolidated ? `Leader Report: ${r.leader_name || 'Leader'}` : (reportData.employee || 'Unknown');
+            const leaderMoodBadge = (isConsolidated || r.leaderMood || reportData.leaderMood)
+                ? (r.leaderMood || reportData.leaderMood || reportData.mood || '😐 Normal')
+                : (reportData.mood || '');
             const metaInfoText = isConsolidated ? `Period: ${r.period || 'Daily'}` : `Self Rating: ${reportData.rating || 'Not rated'}`;
 
             const problems = r.problems || reportData.problems || [];
@@ -1305,6 +1357,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="pending-meta">
                         <span><i data-lucide="calendar" style="width: 14px; height: 14px; display: inline; vertical-align: sub; margin-right: 4px;"></i>${dateStr}</span>
                         <span><i data-lucide="info" style="width: 14px; height: 14px; display: inline; vertical-align: sub; margin-right: 4px;"></i>${metaInfoText}</span>
+                        ${leaderMoodBadge ? `<span><i data-lucide="smile" style="width: 14px; height: 14px; display: inline; vertical-align: sub; margin-right: 4px;"></i>Mood: ${leaderMoodBadge}</span>` : ''}
                     </div>
                     ${problemHtml}
                 </div>
@@ -1642,24 +1695,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const employeeStatsModal = document.getElementById('employee-stats-modal');
     const approvalModal = document.getElementById('approval-modal');
 
-    // Close Modals buttons
-    document.querySelectorAll('.btn-close-modal:not(.btn-dialog-close), .btn-close-modal-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (reportModal) reportModal.classList.remove('active');
-            if (employeeModal) employeeModal.classList.remove('active');
-            if (employeeStatsModal) employeeStatsModal.classList.remove('active');
-            if (approvalModal) approvalModal.classList.remove('active');
-        });
-    });
-
-    // Close modal when clicking background overlay
-    [reportModal, employeeModal, employeeStatsModal, approvalModal].forEach(modal => {
-        if (modal) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.classList.remove('active');
+    // Global Universal Modal Dismiss Listener (handles all modals including dynamic and edge buttons)
+    document.addEventListener('click', (e) => {
+        // 1. Any element with .btn-close-modal or .btn-close-modal-btn or [data-dismiss="modal"] or specific cancel IDs
+        const closeBtn = e.target.closest('.btn-close-modal, .btn-close-modal-btn, [data-dismiss="modal"], #personal-report-cancel, #consolidated-cancel, #edit-report-cancel');
+        if (closeBtn) {
+            // Prompt and confirm dialogs have dedicated promise resolvers
+            if (closeBtn.id === 'custom-prompt-close' || closeBtn.id === 'custom-confirm-close' ||
+                closeBtn.id === 'custom-prompt-cancel' || closeBtn.id === 'custom-confirm-cancel') {
+                return;
+            }
+            const modal = closeBtn.closest('.modal-overlay');
+            if (modal) {
+                modal.classList.remove('active');
+                if (!document.querySelector('.modal-overlay.active')) {
+                    document.body.style.overflow = '';
                 }
-            });
+            }
+            return;
+        }
+
+        // 2. Direct click on modal background backdrop
+        if (e.target.classList.contains('modal-overlay')) {
+            if (e.target.id === 'custom-prompt-modal' || e.target.id === 'custom-confirm-modal') {
+                return;
+            }
+            e.target.classList.remove('active');
+            if (!document.querySelector('.modal-overlay.active')) {
+                document.body.style.overflow = '';
+            }
         }
     });
 
@@ -1733,13 +1797,14 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 history.forEach(item => {
                     const dateStr = item.date ? new Date(item.date).toLocaleString('en-US', { dateStyle: 'medium' }) : '-';
+                    const unitsHtml = (item.units && item.units.length > 0) ? item.units.map(u => `<span class="badge badge-secondary small" style="margin-left:4px; font-size:0.75rem;">${u}</span>`).join('') : '';
                     const selfStr = item.self_rating !== null ? `<span class="badge badge-emerald">⭐️ ${item.self_rating}/10</span>` : '-';
                     const leaderStr = item.leader_rating !== null ? `<span class="badge badge-amber">🏅 ${item.leader_rating}/10</span>` : '-';
                     const adminStr = item.admin_rating !== null ? `<span class="badge badge-primary">👑 ${item.admin_rating}/10</span>` : '-';
 
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td>${dateStr}</td>
+                        <td>${dateStr} ${unitsHtml}</td>
                         <td>${selfStr}</td>
                         <td>${leaderStr}</td>
                         <td>${adminStr}</td>
@@ -1992,6 +2057,12 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="detail-section">
                 <h4>${isConsolidated ? 'Consolidated Summary & Management Notes' : 'Performance Rating & Comments'}</h4>
                 ${isConsolidated ? `
+                    <div class="meta-grid mb-3">
+                        <div class="meta-item">
+                            <span class="label">Leader Shift Mood</span>
+                            <strong>${report.leaderMood || reportData.leaderMood || reportData.mood || '😐 Normal'}</strong>
+                        </div>
+                    </div>
                     <div style="background-color:rgba(255,255,255,0.015); border:1px solid var(--border-color); border-radius:8px; padding:12px 16px; font-size:0.9rem; line-height:1.6;">
                         ${notesContent}
                     </div>
@@ -2002,8 +2073,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             <strong>${reportData.rating || 'Not rated'} / 10</strong>
                         </div>
                         <div class="meta-item">
-                            <span class="label">Daily Mood</span>
-                            <strong>${reportData.mood || 'Not specified'}</strong>
+                            <span class="label">${(report.leaderMood || reportData.leaderMood) ? 'Leader Shift Mood' : 'Daily Mood'}</span>
+                            <strong>${report.leaderMood || reportData.leaderMood || reportData.mood || 'Not specified'}</strong>
                         </div>
                     </div>
                     ${notesContent ? `
@@ -5796,6 +5867,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        const leaderMood = document.getElementById('consolidated-mood')?.value || '😐 Normal';
         const firstIssue = issuesList[0] || {};
         const payload = {
             leader_name: leaderName,
@@ -5804,6 +5876,9 @@ document.addEventListener('DOMContentLoaded', () => {
             included_report_ids: selectedConsolidatedMemberIds,
             has_issue: hasIssue,
             issues: issuesList,
+            mood: leaderMood,
+            leader_mood: leaderMood,
+            leaderMood: leaderMood,
             // Legacy single-issue fields for full backward compatibility
             section: hasIssue === 'yes' ? (firstIssue.unit || 'General') : 'General',
             category: hasIssue === 'yes' ? (firstIssue.unit || 'General') : 'General',

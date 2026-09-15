@@ -3,7 +3,8 @@
     {
       "name": "SHA",
       "unit": [
-        "Broadcast"
+        "Broadcast",
+        "Social"
       ],
       "work_hours": "15:00 - 23:00",
       "special_conditions": [],
@@ -15,7 +16,8 @@
       "reportsTo": [
         5
       ],
-      "leader_type": null
+      "leader_type": null,
+      "leader_shift": null
     },
     {
       "name": "KKH",
@@ -251,6 +253,21 @@
       "reportsTo": [
         5
       ]
+    },
+    {
+      "id": 9902,
+      "name": "MULTI_ROUTING_2",
+      "unit": [
+        "Social",
+        "Conductor"
+      ],
+      "reportsTo": [
+        11,
+        12
+      ],
+      "work_hours": "10:00 - 18:00",
+      "special_conditions": [],
+      "work_location": "Home Office"
     }
   ],
   "error_weights": {

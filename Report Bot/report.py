@@ -2735,18 +2735,103 @@ def save_to_json(report_data: dict, report_id: str = None) -> tuple:
                     break
         
         if not report_entry:
-            # Create new report
-            report_id = str(uuid.uuid4())
-            report_entry = {
-                'id': report_id,
-                'timestamp': datetime.now().isoformat(),
-                'data': report_data,
-                'status': 'pending',
-                'manager_feedback': None,
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }
-            reports.append(report_entry)
+            emp_name = report_data.get('employee', '')
+            # Lookup employee units from employees_en.json
+            employees_en_path = Path(__file__).parent / 'employees_en.json'
+            if not employees_en_path.exists():
+                employees_en_path = Path(__file__).parent.parent / 'Analytics' / 'employees_en.json'
+            emp_units = ["Broadcast"]
+            if employees_en_path.exists():
+                try:
+                    with open(employees_en_path, 'r', encoding='utf-8') as ef:
+                        ef_data = json.load(ef)
+                        e_obj = next((e for e in ef_data.get("employees", []) if (e.get("name") or "").strip().lower() == str(emp_name).strip().lower()), None)
+                        if e_obj:
+                            raw = e_obj.get("unit") or []
+                            if isinstance(raw, str):
+                                raw = [raw]
+                            valid_units = {
+                                "broadcast": "Broadcast",
+                                "social": "Social",
+                                "conductor": "Conductor",
+                                "archive": "Archive",
+                                "r&d": "R&D"
+                            }
+                            found_units = []
+                            seen = set()
+                            for item in raw:
+                                item_str = str(item).strip().lower()
+                                for key, canonical in valid_units.items():
+                                    if key in item_str and canonical not in seen:
+                                        seen.add(canonical)
+                                        found_units.append(canonical)
+                            emp_units = found_units or ["Broadcast"]
+                except Exception as ex:
+                    logger.error(f"Failed to read employee units in save_to_json: {ex}")
+
+            # Deduplicate units
+            seen_u = set()
+            cleaned_emp_units = []
+            for u in emp_units:
+                u_norm = u.strip()
+                if u_norm.lower() not in seen_u:
+                    seen_u.add(u_norm.lower())
+                    cleaned_emp_units.append(u_norm)
+            emp_units = cleaned_emp_units or ["Broadcast"]
+
+            submission_group_id = f"SUB-{uuid.uuid4().hex[:8].upper()}"
+            now_iso = datetime.now().isoformat()
+            
+            # Map problems to units
+            raw_problems = report_data.get('problems', [])
+            problems_by_unit = {u: [] for u in emp_units}
+            for p in raw_problems:
+                p_cat = (p.get("category") or p.get("type") or "").strip().lower()
+                matched = False
+                for u in emp_units:
+                    u_low = u.strip().lower()
+                    if p_cat == u_low or p_cat in u_low or u_low in p_cat:
+                        problems_by_unit[u].append(p)
+                        matched = True
+                        break
+                if not matched:
+                    if p_cat in {'live', 'playlist', 'helpdesk', 'broadcast'}:
+                        for u in emp_units:
+                            if 'broadcast' in u.strip().lower():
+                                problems_by_unit[u].append(p)
+                                matched = True
+                                break
+                if not matched:
+                    problems_by_unit[emp_units[0]].append(p)
+
+            created_ids = []
+            for u in emp_units:
+                u_id = str(uuid.uuid4())
+                created_ids.append(u_id)
+                u_problems = problems_by_unit.get(u, [])
+                u_has_issue = "yes" if u_problems else "no"
+                u_report_data = report_data.copy()
+                u_report_data['unit'] = u
+                u_report_data['has_issue'] = u_has_issue
+                u_report_data['submissionGroupId'] = submission_group_id
+                u_report_data['problems'] = u_problems
+                u_report_data['work_sections'] = [u]
+
+                entry = {
+                    'id': u_id,
+                    'submissionGroupId': submission_group_id,
+                    'unit': u,
+                    'has_issue': u_has_issue,
+                    'timestamp': now_iso,
+                    'data': u_report_data,
+                    'status': 'pending',
+                    'manager_feedback': None,
+                    'created_at': now_iso,
+                    'updated_at': now_iso
+                }
+                reports.append(entry)
+
+            report_id = created_ids[0]
         else:
             # Update existing report
             report_entry['data'].update({
