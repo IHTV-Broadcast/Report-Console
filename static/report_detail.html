@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incident Report Details</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .report-detail-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            box-shadow: var(--shadow-lg);
+        }
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+            gap: 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 480px) {
+            .report-detail-card {
+                padding: 18px 14px;
+            }
+            .meta-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                padding: 12px;
+            }
+        }
+        @media (max-width: 340px) {
+            .meta-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <div class="container header-content">
+            <a href="/" class="brand">
+                <div class="brand-icon">⚡</div>
+                <div>
+                    <div class="brand-title">Incident Reporter</div>
+                    <div class="brand-subtitle">Automated Telegram Dispatch</div>
+                </div>
+            </a>
+            <div class="nav-actions">
+                <a href="/" class="btn btn-secondary btn-sm">
+                    <i data-lucide="arrow-left" style="width: 14px; height: 14px;"></i>
+                    <span>Back to Portal</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 24px; padding-bottom: 60px;">
+        <div id="loading-state" style="text-align: center; padding: 40px; color: var(--text-muted);">
+            Loading incident details...
+        </div>
+
+        <div id="report-card" class="report-detail-card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span style="font-size: 1.4rem; font-weight: 800; color: var(--primary); letter-spacing: 0.02em;" id="rep-tracking-code">#INC-00-0000</span>
+                    <span class="badge badge-pending" id="rep-status-badge">Pending</span>
+                    <span class="badge" id="rep-source-badge" style="background: rgba(16, 185, 129, 0.15); color: #059669; font-weight: 600;">Web</span>
+                </div>
+                <div id="rep-timestamp" style="font-size: 0.85rem; color: var(--text-muted);">Timestamp</div>
+            </div>
+
+            <div class="meta-grid">
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em;">Unit</div>
+                    <strong id="rep-unit" style="color: var(--text-primary); font-size: 0.95rem; word-break: break-word;">-</strong>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em;">Section</div>
+                    <strong id="rep-section" style="color: var(--text-primary); font-size: 0.95rem; word-break: break-word;">-</strong>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em;">Reported By</div>
+                    <strong id="rep-reporter" style="color: var(--text-primary); font-size: 0.95rem; word-break: break-word;">-</strong>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em;">Priority</div>
+                    <strong id="rep-priority" style="color: var(--text-primary); font-size: 0.95rem;">Normal</strong>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <h4 style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 8px;">Problem Description</h4>
+                <div id="rep-description" style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 16px; font-size: 0.95rem; color: var(--text-primary); unicode-bidi: plaintext; line-height: 1.6; word-break: break-word;">
+                    -
+                </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <h4 style="font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 8px;">Telegram Private Message (PV) Recipients & Delivery</h4>
+                <div id="rep-recipients-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 1. Detect page refresh / reload
+            const navEntries = window.performance.getEntriesByType('navigation');
+            const isReload = (navEntries.length > 0 && navEntries[0].type === 'reload')
+                             || (window.performance.navigation && window.performance.navigation.type === 1);
+
+            const activeUser = sessionStorage.getItem('incident_active_reporter');
+            const adminToken = sessionStorage.getItem('incident_admin_token');
+
+            // Enforce redirect to login on refresh or unauthenticated direct access
+            if (isReload || (!activeUser && !adminToken)) {
+                sessionStorage.removeItem('incident_active_reporter');
+                sessionStorage.removeItem('incident_admin_token');
+                window.location.replace('/');
+                return;
+            }
+
+            // 2. Prevent Back/Forward cache retention
+            window.addEventListener('pageshow', (event) => {
+                if (event.persisted) {
+                    window.location.replace('/');
+                }
+            });
+
+            const reportId = window.location.pathname.split('/').filter(Boolean).pop();
+            const loading = document.getElementById('loading-state');
+            const card = document.getElementById('report-card');
+
+            try {
+                const res = await fetch(`/api/reports/${reportId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const r = data.report;
+                    document.getElementById('rep-tracking-code').innerText = `#${r.tracking_code}`;
+                    document.getElementById('rep-status-badge').innerText = r.status;
+                    document.getElementById('rep-timestamp').innerText = r.created_at.slice(0, 16).replace('T', ' ');
+                    document.getElementById('rep-unit').innerText = r.unit_name;
+                    document.getElementById('rep-section').innerText = (r.section_name && r.section_name !== r.unit_name) ? r.section_name : 'General Scope';
+                    document.getElementById('rep-reporter').innerText = r.reporter_name;
+                    document.getElementById('rep-priority').innerText = r.priority;
+                    document.getElementById('rep-description').innerText = r.description;
+
+                    const srcBadge = document.getElementById('rep-source-badge');
+                    if (srcBadge) {
+                        const isTg = (r.source || '').toLowerCase() === 'telegram';
+                        srcBadge.innerHTML = isTg ? '🤖 Telegram' : '🌐 Web';
+                        srcBadge.style.color = isTg ? '#0284c7' : '#059669';
+                        srcBadge.style.background = isTg ? 'rgba(14, 165, 233, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+                    }
+
+                    const list = document.getElementById('rep-recipients-list');
+                    const logs = data.dispatch_logs || [];
+                    if (logs.length > 0) {
+                        list.innerHTML = logs.map(l => {
+                            const isSent = l.status === 'SENT';
+                            const isFailed = l.status === 'FAILED';
+                            const color = isSent ? 'var(--emerald)' : (isFailed ? 'var(--rose)' : 'var(--amber)');
+                            const icon = isSent ? '✅' : (isFailed ? '❌' : '⏳');
+                            const errorText = l.error_message ? `<div style="font-size: 0.75rem; color: var(--rose); margin-top: 4px;">${l.error_message}</div>` : '';
+                            return `
+                                <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                                    <div>
+                                        <strong style="color: var(--text-primary); font-size: 0.92rem;">${l.user_name || 'Recipient'}</strong>
+                                        ${l.recipient_role === 'ADMIN' ? `<span style="font-size: 0.75rem; color: var(--rose); font-weight: 700; margin-left: 6px;">(Admin)</span>` : ''}
+                                        ${l.telegram_id ? `<span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 6px;">(TG ID: <code>${l.telegram_id}</code>)</span>` : '<span style="font-size: 0.8rem; color: var(--rose); margin-left: 6px;">(Telegram Not Linked)</span>'}
+                                        ${errorText}
+                                    </div>
+                                    <div style="font-weight: 700; color: ${color}; font-size: 0.85rem; white-space: nowrap;">
+                                        ${icon} ${l.status}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        list.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">No dispatch records found.</span>';
+                    }
+
+                    loading.style.display = 'none';
+                    card.style.display = 'block';
+                    if (window.lucide) window.lucide.createIcons();
+                } else {
+                    loading.innerHTML = '<div style="color: var(--rose);">Incident report not found.</div>';
+                }
+            } catch (e) {
+                loading.innerHTML = '<div style="color: var(--rose);">Failed to load report.</div>';
+            }
+        });
+    </script>
+</body>
+</html>

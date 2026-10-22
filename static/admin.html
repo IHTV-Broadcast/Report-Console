@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incident Console - Admin Management</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="container-admin header-content">
+            <a href="/" class="brand">
+                <div class="brand-icon" style="background: linear-gradient(135deg, #10b981, #06b6d4);">🛡️</div>
+                <div>
+                    <div class="brand-title">Admin Management Console</div>
+                    <div class="brand-subtitle">Incident Portal & Telegram Dispatch Center</div>
+                </div>
+            </a>
+
+            <div class="nav-actions">
+                <a href="/" class="btn btn-secondary btn-sm">
+                    <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+                    <span>Employee Portal</span>
+                </a>
+                <button class="btn btn-secondary btn-sm" id="btn-admin-logout" style="display: inline-flex;">
+                    <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container-admin" style="padding-top: 24px; padding-bottom: 60px;">
+
+        <!-- Admin Workspace Tabs -->
+        <section id="admin-workspace-view">
+
+            <!-- Tabs Nav -->
+            <div class="admin-tabs-nav">
+                <button class="btn btn-primary btn-sm admin-tab-btn active" data-tab="tab-reports">
+                    <i data-lucide="alert-circle" style="width: 14px; height: 14px;"></i>
+                    <span>Incidents</span>
+                </button>
+                <button class="btn btn-secondary btn-sm admin-tab-btn" data-tab="tab-users">
+                    <i data-lucide="users" style="width: 14px; height: 14px;"></i>
+                    <span>Employees</span>
+                </button>
+                <button class="btn btn-secondary btn-sm admin-tab-btn" data-tab="tab-units">
+                    <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
+                    <span>Units</span>
+                </button>
+                <button class="btn btn-secondary btn-sm admin-tab-btn" data-tab="tab-categories">
+                    <i data-lucide="tag" style="width: 14px; height: 14px;"></i>
+                    <span>Issue Categories</span>
+                </button>
+                <button class="btn btn-secondary btn-sm admin-tab-btn" data-tab="tab-telegram">
+                    <i data-lucide="send" style="width: 14px; height: 14px;"></i>
+                    <span>Telegram Settings</span>
+                </button>
+            </div>
+
+            <!-- Tab 1: Reports Management -->
+            <div id="tab-reports" class="admin-tab-pane">
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <input type="text" id="report-search-input" class="form-control" placeholder="Search code, reporter, or issue..." style="max-width: 320px; font-size: 0.85rem;">
+                        <select id="report-status-filter" class="form-control" style="max-width: 160px; font-size: 0.85rem;">
+                            <option value="">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Resolved">Resolved</option>
+                        </select>
+                        <select id="report-priority-filter" class="form-control" style="max-width: 160px; font-size: 0.85rem;">
+                            <option value="">All Priorities</option>
+                            <option value="Critical">🔴 Critical</option>
+                            <option value="Normal">🟡 Normal</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary btn-sm" id="btn-refresh-reports">
+                            <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Reports Bulk Action Bar -->
+                <div class="bulk-toolbar" id="reports-bulk-bar">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;"><span id="reports-selected-count">0</span> incident(s) selected</span>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-reports-select-all">Select All</button>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-reports-clear-select">Clear</button>
+                    </div>
+                    <button type="button" class="btn btn-danger btn-xs" id="btn-reports-bulk-delete" style="background: var(--rose); color: white; border: none; padding: 7px 14px; font-weight: 600;">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete Selected
+                    </button>
+                </div>
+
+                <div id="admin-reports-table-container">
+                    <!-- Reports list rendered here -->
+                </div>
+            </div>
+
+            <!-- Tab 2: Employees Management -->
+            <div id="tab-users" class="admin-tab-pane" style="display: none;">
+                <div class="filter-bar">
+                    <div>
+                        <h3 style="font-size: 1.2rem;">Employees Directory</h3>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">Manage staff accounts, assign numeric Telegram User IDs for direct private alerts, and track dispatch readiness.</p>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <select id="users-status-filter" class="form-control" style="width: auto; min-width: 190px; font-size: 0.85rem; padding: 7px 12px;">
+                            <option value="all">All Employees</option>
+                            <option value="missing_tg">⚠️ Needs Telegram ID</option>
+                            <option value="active">Active Only</option>
+                            <option value="inactive">Inactive Only</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" id="btn-add-user">+ Add Staff Member</button>
+                    </div>
+                </div>
+
+                <!-- Users Bulk Action Bar -->
+                <div class="bulk-toolbar" id="users-bulk-bar">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;"><span id="users-selected-count">0</span> employee(s) selected</span>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-users-select-all">Select All</button>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-users-clear-select">Clear</button>
+                    </div>
+                    <button type="button" class="btn btn-danger btn-xs" id="btn-users-bulk-delete" style="background: var(--rose); color: white; border: none; padding: 7px 14px; font-weight: 600;">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete Selected
+                    </button>
+                </div>
+
+                <div id="users-table-container">
+                    <!-- Users table -->
+                </div>
+            </div>
+
+            <!-- Tab 3: Units & Sections -->
+            <div id="tab-units" class="admin-tab-pane" style="display: none;">
+                <div class="filter-bar">
+                    <div>
+                        <h3 style="font-size: 1.2rem;">Units & Sections</h3>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">Configure company units, child sections, and assigned section managers for notifications.</p>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary btn-sm" id="btn-add-unit">+ Add Unit</button>
+                        <button class="btn btn-primary btn-sm" id="btn-add-section">+ Add Section to Unit</button>
+                    </div>
+                </div>
+
+                <!-- Units Bulk Action Bar -->
+                <div class="bulk-toolbar" id="units-bulk-bar">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;"><span id="units-selected-count">0</span> item(s) selected</span>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-units-clear-select">Clear</button>
+                    </div>
+                    <button type="button" class="btn btn-danger btn-xs" id="btn-units-bulk-delete" style="background: var(--rose); color: white; border: none; padding: 7px 14px; font-weight: 600;">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete Selected
+                    </button>
+                </div>
+
+                <div id="units-hierarchy-tree" style="display: flex; flex-direction: column; gap: 16px;">
+                    <!-- Rendered units & their child sections -->
+                </div>
+            </div>
+
+            <!-- Tab 4: Issue Categories / Presets Management -->
+            <div id="tab-categories" class="admin-tab-pane" style="display: none;">
+                <div class="filter-bar">
+                    <div>
+                        <h3 style="font-size: 1.2rem;">Issue Categories & Presets</h3>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">Manage 1-tap problem preset tags available to users in the reporting wizard.</p>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <select id="categories-status-filter" class="form-control" style="width: auto; min-width: 150px; font-size: 0.85rem; padding: 7px 12px;">
+                            <option value="all">All Categories</option>
+                            <option value="active">Active Only</option>
+                            <option value="inactive">Inactive Only</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" id="btn-add-category">+ Add Issue Option</button>
+                    </div>
+                </div>
+
+                <!-- Categories Bulk Action Bar -->
+                <div class="bulk-toolbar" id="categories-bulk-bar">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;"><span id="categories-selected-count">0</span> category(ies) selected</span>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-categories-select-all">Select All</button>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-categories-clear-select">Clear</button>
+                    </div>
+                    <button type="button" class="btn btn-danger btn-xs" id="btn-categories-bulk-delete" style="background: var(--rose); color: white; border: none; padding: 7px 14px; font-weight: 600;">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete Selected
+                    </button>
+                </div>
+
+                <div id="categories-table-container">
+                    <!-- Issue Categories table -->
+                </div>
+            </div>
+
+            <!-- Tab 5: Telegram Settings & Live Test -->
+            <div id="tab-telegram" class="admin-tab-pane" style="display: none;">
+                <div style="max-width: 650px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px;">
+                    <h3 style="margin-bottom: 6px; font-size: 1.25rem;">Telegram Bot & Dispatch Settings</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                        Incident alerts are automatically dispatched by the Telegram Bot to the configured Corporate Group or Admin Chat. Selected staff also receive copies if chosen during reporting.
+                    </p>
+
+                    <form id="telegram-settings-form">
+                        <div class="form-group">
+                            <label class="form-label" for="tg-bot-token">Telegram Bot Token</label>
+                            <input type="text" id="tg-bot-token" class="form-control" placeholder="123456789:ABCdefGhIJKlmNoPQRstuvWxyz" required>
+                            <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">Obtained from @BotFather in Telegram (Connected Bot: @ihtv_report_bot).</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="tg-chat-id">Target Group ID or Admin Telegram ID</label>
+                            <input type="text" id="tg-chat-id" class="form-control" placeholder="e.g. @ihtv_report_group or -1002756155863" required>
+                            <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">Supergroup ID (e.g. @ihtv_report_group or -1002756155863) or Admin numeric Telegram User ID.</small>
+                        </div>
+
+                        <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+                            <button type="submit" class="btn btn-primary">Save Settings</button>
+                            <button type="button" class="btn btn-secondary" id="btn-test-telegram">
+                                <i data-lucide="send" style="width: 14px; height: 14px;"></i>
+                                <span>Send Test Alert to Group / Admin</span>
+                            </button>
+                        </div>
+                    </form>
+                    <div id="tg-test-result" style="margin-top: 16px; font-size: 0.9rem;"></div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Modal: Add / Edit User -->
+    <div class="modal-overlay" id="user-modal">
+        <div class="modal-card">
+            <h3 id="user-modal-title" style="font-size: 1.25rem;">Add Staff Member</h3>
+            <form id="user-crud-form" style="margin-top: 16px;">
+                <input type="hidden" id="crud-user-id">
+                <div class="form-group">
+                    <label class="form-label">Employee Name <span style="color: var(--rose);">*</span></label>
+                    <input type="text" id="crud-user-name" class="form-control" placeholder="e.g. SHA or John Doe" required>
+                    <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">Employee name or 3-letter abbreviation.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Telegram User ID <span id="crud-tg-id-required-mark" style="color: var(--rose);">*</span></label>
+                    <input type="text" id="crud-user-tg-id" class="form-control" placeholder="e.g. 123456789" required autocomplete="off">
+                    <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">Real numeric Telegram Account ID (digits only, e.g. 123456789). Do not enter @username. Recipient must open the bot and click /start.</small>
+                </div>
+
+
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="crud-user-active" checked style="width: 16px; height: 16px; accent-color: var(--primary);">
+                    <label for="crud-user-active" class="form-label" style="margin-bottom: 0; cursor: pointer;">Active Account (Visible for login & report selection)</label>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-user-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-user-submit">Save Staff Member</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add / Edit Unit -->
+    <div class="modal-overlay" id="unit-modal">
+        <div class="modal-card">
+            <h3 id="unit-modal-title" style="font-size: 1.25rem;">Add Unit</h3>
+            <form id="unit-crud-form" style="margin-top: 16px;">
+                <input type="hidden" id="crud-unit-id">
+                <div class="form-group">
+                    <label class="form-label">Unit Name *</label>
+                    <input type="text" id="crud-unit-name" class="form-control" placeholder="e.g. Transmission & Satellite" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Icon (Lucide Icon Name)</label>
+                    <input type="text" id="crud-unit-icon" class="form-control" placeholder="e.g. radio, layers, cpu, film">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description (Optional)</label>
+                    <input type="text" id="crud-unit-desc" class="form-control" placeholder="Brief explanation of unit scope">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sort Order</label>
+                    <input type="number" id="crud-unit-sort" class="form-control" value="0" min="0">
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="crud-unit-active" checked style="width: 16px; height: 16px; accent-color: var(--primary);">
+                    <label for="crud-unit-active" class="form-label" style="margin-bottom: 0; cursor: pointer;">Active Unit (Visible in reporting wizard)</label>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-unit-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-unit-submit">Save Unit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add / Edit Section -->
+    <div class="modal-overlay" id="section-modal">
+        <div class="modal-card">
+            <h3 id="section-modal-title" style="font-size: 1.25rem;">Add Section to Unit</h3>
+            <form id="section-crud-form" style="margin-top: 16px;">
+                <input type="hidden" id="crud-sec-id">
+                <div class="form-group">
+                    <label class="form-label">Parent Unit *</label>
+                    <select id="crud-sec-unit" class="form-control" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Section Name *</label>
+                    <input type="text" id="crud-sec-name" class="form-control" placeholder="e.g. Ingest Desk" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" id="crud-sec-desc" class="form-control" placeholder="Scope / equipment covered">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Responsible Managers for Telegram Notifications</label>
+                    <select id="crud-sec-managers" class="form-control" multiple style="height: 100px;"></select>
+                    <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">Hold Ctrl / Cmd to select multiple managers.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sort Order</label>
+                    <input type="number" id="crud-sec-sort" class="form-control" value="0" min="0">
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="crud-sec-active" checked style="width: 16px; height: 16px; accent-color: var(--primary);">
+                    <label for="crud-sec-active" class="form-label" style="margin-bottom: 0; cursor: pointer;">Active Section (Selectable in reporting wizard)</label>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-sec-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-sec-submit">Save Section</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add / Edit Issue Category -->
+    <div class="modal-overlay" id="category-modal">
+        <div class="modal-card">
+            <h3 id="category-modal-title" style="font-size: 1.25rem;">Add Issue Option</h3>
+            <form id="category-crud-form" style="margin-top: 16px;">
+                <input type="hidden" id="crud-cat-id">
+                <div class="form-group">
+                    <label class="form-label">Issue Option / Category Name *</label>
+                    <input type="text" id="crud-cat-name" class="form-control" placeholder="e.g. Signal Delay, Black Screen" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Applicable Unit Scope</label>
+                    <select id="crud-cat-unit" class="form-control">
+                        <option value="">Global (Applicable to All Units)</option>
+                    </select>
+                    <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">Choose whether this preset is global or specific to a particular unit.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Display Sort Order</label>
+                    <input type="number" id="crud-cat-sort" class="form-control" value="0" min="0">
+                    <small style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; display: block;">Lower numbers appear first in the 1-tap chip list.</small>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="crud-cat-active" checked style="width: 16px; height: 16px; accent-color: var(--primary);">
+                    <label for="crud-cat-active" class="form-label" style="margin-bottom: 0; cursor: pointer;">Active (Available for 1-tap selection in reporting wizard)</label>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-cat-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-cat-submit">Save Issue Option</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/admin.js"></script>
+</body>
+</html>
